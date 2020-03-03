@@ -58,11 +58,11 @@ Python 3.7
 
 ### Citation
 ```
-@article{Xuan2019ImprovedEW,
-  title={Improved Embeddings with Easy Positive Triplet Mining},
-  author={Hong Xuan and Abby Stylianou and Robert Pless},
-  journal={ArXiv},
-  year={2019},
-  volume={abs/1904.04370}
+@InProceedings{Xuan_2020_WACV,
+author = {Xuan, Hong and Stylianou, Abby and Pless, Robert},
+title = {Improved Embeddings with Easy Positive Triplet Mining},
+booktitle = {The IEEE Winter Conference on Applications of Computer Vision (WACV)},
+month = {March},
+year = {2020}
 }
 ```
