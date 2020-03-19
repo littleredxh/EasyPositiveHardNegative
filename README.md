@@ -2,7 +2,7 @@
 
 This repository contains a PyTorch(1.1.0) implementation of Improved Embeddings with Easy Positive Triplet Mining(WACV2020)
 
-Paper link: https://arxiv.org/abs/1904.04370
+Paper link: http://openaccess.thecvf.com/content_WACV_2020/papers/Xuan_Improved_Embeddings_with_Easy_Positive_Triplet_Mining_WACV_2020_paper.pdf
 
 Prepare the training data and testing data in python dictionary format. 
 
