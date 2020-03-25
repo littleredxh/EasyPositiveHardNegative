@@ -24,7 +24,7 @@ def Mat(Lvec):
     return Same.clone().fill_diagonal_(0), ~Same#same diff
     
 class EPHNLoss(Module):
-    def __init__(self,s=1):
+    def __init__(self,s=0.1):
         super(EPHNLoss, self).__init__()
         self.semi = False
         self.sigma = s
