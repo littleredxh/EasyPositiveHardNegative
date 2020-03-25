@@ -1,1 +1,2 @@
-_result/
+_result/*
+.ipynb_checkpoints/*
