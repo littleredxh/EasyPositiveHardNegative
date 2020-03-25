@@ -29,7 +29,7 @@ def RunAcc2(src, rank):
 
 def eva(dsets, model):
     Fvecs = []
-    dataLoader = torch.utils.data.DataLoader(dsets, batch_size=400, sampler=SequentialSampler(dsets), num_workers=48)
+    dataLoader = torch.utils.data.DataLoader(dsets, batch_size=1000, sampler=SequentialSampler(dsets), num_workers=48)
     torch.set_grad_enabled(False)
     model.eval()
     for data in dataLoader:
@@ -46,7 +46,7 @@ def recall(Fvec, imgLab,rank=None):
     imgLab = torch.LongTensor([imgLab[i] for i in range(len(imgLab))])
     
     D = Fvec.mm(torch.t(Fvec))
-    D[torch.eye(len(imgLab)).byte()] = -1
+    D[torch.eye(len(imgLab)).bool()] = -1
     
     if rank==None:
         _,idx = D.max(1)

@@ -12,6 +12,8 @@ from .Loss import EPHNLoss
 from .Utils import recall, recall2, recall2_batch, eva
 from .color_lib import RGBmean, RGBstdv
 
+from torch.utils.tensorboard import SummaryWriter
+
 PHASE = ['tra','val']
 
 class learn():
@@ -19,7 +21,7 @@ class learn():
         self.dst = dst
         self.gpuid = [0]
             
-        self.imgsize = 256
+        self.imgsize = 224
         self.batch_size = 128
         self.num_workers = 32
         
@@ -36,7 +38,11 @@ class learn():
         
         self.criterion = EPHNLoss() 
         self.Graph_size = 16
+        self.test_freq = 5
         
+        self.writer = SummaryWriter(dst)
+        self.global_it = 0
+        self.multi_gpu = False
         if not self.setsys(): print('system error'); return
         
     def run(self, emb_dim, model_name, num_epochs=20):
@@ -93,17 +99,21 @@ class learn():
             num_ftrs = self.model.fc.in_features
             self.model.fc = nn.Linear(num_ftrs, self.out_dim)
             self.model.avgpool = nn.AvgPool2d(self.avg)
+        elif model_name == 'GBN':
+            self.model = models.googlenet(pretrained=True, aux_logits=False, transform_input=False)
+            self.model.aux_logits=False
+            num_ftrs = self.model.fc.in_features
+            self.model.fc = nn.Linear(num_ftrs, self.classSize)
+            print('Setting model: GoogleNet')
+            
         else:
-            pass
-            # self.model = googlenet(pretrained=True)
-            # self.model.aux_logits=False
-            # num_ftrs = self.model.fc.in_features
-            # self.model.fc = nn.Linear(num_ftrs, self.classSize)
-            # print('Setting model: GoogleNet')
-
+            print('model is not exited!')
+            
         print('Training on Single-GPU')
         print('LR is set to {}'.format(self.init_lr))
         self.model = self.model.cuda()
+        if self.multi_gpu:
+            self.model = torch.nn.DataParallel(self.model, device_ids=[0,1,2,3], output_device=0)
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.init_lr, momentum=0.0)
         return
     
@@ -124,75 +134,88 @@ class learn():
     # step 3: Learning
     ##################################################
     def opt(self):
-        # recording time and epoch info
-        since = time.time()
-        self.record = []
-        
-        # calculate the retrieval accuracy
-        if self.Data in ['SOP','CUB','CAR']:
-            acc = self.recall_val2val(-1)
-        elif self.Data=='ICR':
-            acc = self.recall_val2gal(-1)
-        elif self.Data=='HOTEL':
-            acc = self.recall_val2tra(-1)
+        if self.Data in ['SOP','ICR']:
+            batch_limit = 120
         else:
-            acc = self.recall_val2tra(-1)
-        
-        self.record.append([-1, 0]+acc)
+            batch_limit = 30
+            
+        # recording time
+        since = time.time()
     
-        for epoch in range(self.num_epochs): 
+        for epoch in range(self.num_epochs+1): 
             # adjust the learning rate
-            print('Epoch {}/{} \n '.format(epoch+1, self.num_epochs) + '-' * 40)
+            print('Epoch {}/{} \n '.format(epoch, self.num_epochs) + '-' * 40)
             self.lr_scheduler(epoch)
             
-            # train 
-            tra_loss = self.tra()
-            
-            # calculate the retrieval accuracy
-            if self.Data in ['SOP','CUB','CAR']:
-                acc = self.recall_val2val(epoch)
-            elif self.Data=='ICR':
-                acc = self.recall_val2gal(epoch)
-            elif self.Data=='HOTEL':
-                acc = self.recall_val2tra(epoch)
-            else:
-                acc = self.recall_val2tra(epoch)
+            if epoch>0:
+                # train 
+                tra_loss, N_sample = self.tra()
+                while N_sample<self.batch_size*batch_limit:
+                    tra_loss_tmp, N_sample_tmp = self.tra(N_limit=self.batch_size*batch_limit-N_sample)
+                    tra_loss+=tra_loss_tmp
+                    N_sample+=N_sample_tmp
+                    
+                self.writer.add_scalar('loss', tra_loss/N_sample, epoch)
                 
-            self.record.append([epoch, tra_loss]+acc)
+            if epoch%self.test_freq==0:
+                # calculate the retrieval accuracy
+                if self.Data in ['SOP','CUB','CAR']:
+                    acc = self.recall_val2val(epoch)
+                elif self.Data=='ICR':
+                    acc = self.recall_val2gal(epoch)
+                elif self.Data=='HOTEL':
+                    acc = self.recall_val2tra(epoch)
+                else:
+                    acc = self.recall_val2tra(epoch)
+                    
+                self.writer.add_scalar(self.Data+'_train_R@1', acc[0], epoch)
+                self.writer.add_scalar(self.Data+'_test_R@1', acc[1], epoch)
 
         # save model
-        torch.save(self.model.cpu(), self.dst + 'model.pth')
-        torch.save(torch.Tensor(self.record), self.dst + 'record.pth')
+        torch.save(self.model.module.cpu(), self.dst + 'model.pth')
         time_elapsed = time.time() - since
         print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed//60, time_elapsed%60))
         return
     
-    def tra(self):
-        self.model.train(True)  # Set model to training mode
+    def tra(self, N_limit=-1):
+        if self.multi_gpu:
+            self.model.module.train(True)  # Set model to training mode with frozen BN
+        else:
+            self.model.train(True)  # Set model to training mode with frozen BN
+            
         if self.Data in ['CUB','CAR']:
             dataLoader = torch.utils.data.DataLoader(self.dsets, batch_size=self.batch_size, sampler=BalanceSampler(self.intervals, GSize=self.Graph_size), num_workers=self.num_workers)
         else: 
             dataLoader = torch.utils.data.DataLoader(self.dsets, batch_size=self.batch_size, sampler=BalanceSampler2(self.intervals, GSize=self.Graph_size), num_workers=self.num_workers)
         
         L_data, N_data = 0.0, 0
+        Pos_data, Neg_data = list(), list()
         # iterate batch
         for data in dataLoader:
             self.optimizer.zero_grad()
             with torch.set_grad_enabled(True):
                 inputs_bt, labels_bt = data # <FloatTensor> <LongTensor>
                 fvec = self.model(inputs_bt.cuda())
-                loss = self.criterion(fvec, labels_bt.cuda())
+                loss, Pos_log, Neg_log, margin = self.criterion(fvec, labels_bt.cuda())
 
                 loss.backward()
-                self.optimizer.step()  
-            
+                self.optimizer.step() 
+                self.writer.add_histogram('Pos_hist', Pos_log, self.global_it)
+                self.writer.add_histogram('Neg_hist', Neg_log, self.global_it)
+                self.writer.add_scalar('Margin', margin, self.global_it)
+                self.global_it+=1
+                
             L_data += loss.item()
             N_data += len(labels_bt)
+            if N_data>N_limit and N_limit!=-1: break
 
-        return L_data/N_data
+        return L_data,N_data
         
     def recall_val2val(self, epoch):
-        self.model.train(False)  # Set model to testing mode
+        if self.multi_gpu:
+            self.model.module.eval()  # Set model to testing mode
+        else:
+            self.model.eval()  # Set model to testing mode
         dsets_tra = ImageReader(self.data_dict['tra'], self.val_transforms) 
         dsets_val = ImageReader(self.data_dict['val'], self.val_transforms) 
         Fvec_tra = eva(dsets_tra, self.model)
@@ -211,7 +234,7 @@ class learn():
         return [acc_tra, acc_val]
     
     def recall_val2tra(self, epoch):
-        self.model.train(False)  # Set model to testing mode
+        self.model.eval()  # Set model to testing mode
         dsets_tra = ImageReader(self.data_dict['tra'], self.val_transforms) 
         dsets_val = ImageReader(self.data_dict['val'], self.val_transforms) 
         Fvec_tra = eva(dsets_tra, self.model)
@@ -229,7 +252,7 @@ class learn():
         return [acc]
     
     def recall_val2gal(self, epoch):
-        self.model.train(False)  # Set model to testing mode
+        self.model.eval()  # Set model to testing mode
         dsets_gal = ImageReader(self.data_dict['gal'], self.val_transforms) 
         dsets_val = ImageReader(self.data_dict['val'], self.val_transforms) 
         Fvec_gal = eva(dsets_gal, self.model)
@@ -244,5 +267,5 @@ class learn():
         acc = recall2(Fvec_val, Fvec_gal, dsets_val.idx_to_class, dsets_gal.idx_to_class)
         print('R@1:{:.2f}'.format(acc)) 
         
-        return [acc]
+        return [acc,acc]
     

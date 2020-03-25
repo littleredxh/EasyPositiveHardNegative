@@ -44,7 +44,7 @@ class BalanceSampler(Sampler):
     
 
 class BalanceSampler2(Sampler):
-    def __init__(self, intervals, GSize=5):
+    def __init__(self, intervals, GSize=2):
         # generate interval list
         interval_list = []
         for b in intervals:
