@@ -73,9 +73,9 @@ class EPHNLoss(Module):
 
         # loss
         Prob = -F.log_softmax(T/self.sigma,dim=1)[:,0]
-        loss = Prob[Mask_not_drop].sum()
+        loss = Prob[Mask_not_drop].mean()
 
-        print('loss:{:.3f} rt:{:.3f}'.format(loss.item()/N, Mask_not_drop.float().mean().item()), end='\r')
+        print('loss:{:.3f} rt:{:.3f}'.format(loss.item(), Mask_not_drop.float().mean().item()), end='\r')
 
-        return loss/4, torch.cat([Pos_log[(V_pos>0)], torch.Tensor([0,1])],0), torch.cat([Neg_log[(V_neg>0)], torch.Tensor([0,1])],0), Pos_log.mean()-Neg_log.mean()
+        return loss, torch.cat([Pos_log[(V_pos>0)], torch.Tensor([0,1])],0), torch.cat([Neg_log[(V_neg>0)], torch.Tensor([0,1])],0), Pos_log.mean()-Neg_log.mean()
     

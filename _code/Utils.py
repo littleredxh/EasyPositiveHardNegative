@@ -1,45 +1,49 @@
 import torch
-from torch.utils.data.sampler import SequentialSampler
+from torchvision import transforms
 
-def RunAcc(src, rank, phase='val'):
-    Fvec = torch.load(src +'39'+ phase + 'Fvecs.pth')
-    dsets = torch.load(src + phase + 'dsets.pth')
-    
-    acc = recall(Fvec, dsets.idx_to_class,rank=rank)
-    
-    torch.save(acc,src+'acc.pth')
-    torch.set_printoptions(precision=1)
-    print(acc*100)
-    torch.set_printoptions(precision=3)
-    return acc
+def tra_transforms(imgsize, RGBmean, RGBstdv):
+    return transforms.Compose([transforms.Resize(int(imgsize*1.1)),
+                                 transforms.RandomCrop(imgsize),
+                                 transforms.RandomHorizontalFlip(),
+                                 transforms.ToTensor(),
+                                 transforms.Normalize(RGBmean, RGBstdv)])
 
-def RunAcc2(src, rank):
-    Fvec_val = torch.load(src+'valFvecs.pth')
-    Fvec_gal = torch.load(src+'galFvecs.pth')
-    dsets_val = torch.load(src+'valdsets.pth')
-    dsets_gal = torch.load(src+'galdsets.pth')
-    
-    acc = recall2(Fvec_val, Fvec_gal, dsets_val.idx_to_class, dsets_gal.idx_to_class,rank=rank)
+def eva_transforms(imgsize, RGBmean, RGBstdv):
+    return transforms.Compose([transforms.Resize(imgsize),
+                                 transforms.CenterCrop(imgsize),
+                                 transforms.ToTensor(),
+                                 transforms.Normalize(RGBmean, RGBstdv)])
 
-    torch.save(acc,src+'acc.pth')
-    torch.set_printoptions(precision=1)
-    print(acc*100)
-    torch.set_printoptions(precision=3)
-    return acc
+def RP(D,imgLab,label_counts):
+    # for each image calculate R-Precision
+    A=0
+    for i in range(D.size(1)):
+        # Find R nearest neighbors index
+        _,idx = D[i,:].topk(label_counts[i])
+        # Convert R nearest neighbors index to label
+        imgPre = imgLab[idx]
+        # compare R nearest neighbors label to ground truth label
+        # and calculate the R-Precision
+        A += (imgPre==imgLab[i]).float().mean()
 
-def eva(dsets, model):
-    Fvecs = []
-    dataLoader = torch.utils.data.DataLoader(dsets, batch_size=1000, sampler=SequentialSampler(dsets), num_workers=48)
-    torch.set_grad_enabled(False)
-    model.eval()
-    for data in dataLoader:
-        inputs_bt, labels_bt = data # <FloatTensor> <LongTensor>
-        fvec = model(inputs_bt.cuda())
-        fvec = norml2(fvec)
-        fvec = fvec.cpu()
-        Fvecs.append(fvec)
-            
-    return torch.cat(Fvecs,0)
+    return (A/D.size(1)).item()
+
+def MAPR(D,imgLab,label_counts):
+    # for each image calculate R-Precision
+    A=0
+    for i in range(D.size(1)):
+        # Find R nearest neighbors index
+        _,idx = D[i,:].topk(label_counts[i])
+        w = torch.arange(1,label_counts[i]+1)
+        # Convert R nearest neighbors index to label
+        imgPre = imgLab[idx]
+        # compare R nearest neighbors label to ground truth label
+        # and calculate the R-Precision
+        p = (imgPre==imgLab[i]).float()
+        p = p*p.cumsum(0)
+        A += (p/w).mean()
+
+    return (A/D.size(1)).item()
 
 def recall(Fvec, imgLab,rank=None):
     N = len(imgLab)
@@ -114,6 +118,32 @@ def recall2_batch(Fvec_val, Fvec_gal, imgLab_val, imgLab_gal, gap=100):
     A = (imgPre==imgLab_val).float()
     return (torch.sum(A)/N).item(), idx
     
+def RunAcc(src, rank, phase='val'):
+    Fvec = torch.load(src +'39'+ phase + 'Fvecs.pth')
+    dsets = torch.load(src + phase + 'dsets.pth')
+    
+    acc = recall(Fvec, dsets.idx_to_class,rank=rank)
+    
+    torch.save(acc,src+'acc.pth')
+    torch.set_printoptions(precision=1)
+    print(acc*100)
+    torch.set_printoptions(precision=3)
+    return acc
+
+def RunAcc2(src, rank):
+    Fvec_val = torch.load(src+'valFvecs.pth')
+    Fvec_gal = torch.load(src+'galFvecs.pth')
+    dsets_val = torch.load(src+'valdsets.pth')
+    dsets_gal = torch.load(src+'galdsets.pth')
+    
+    acc = recall2(Fvec_val, Fvec_gal, dsets_val.idx_to_class, dsets_gal.idx_to_class,rank=rank)
+
+    torch.save(acc,src+'acc.pth')
+    torch.set_printoptions(precision=1)
+    print(acc*100)
+    torch.set_printoptions(precision=3)
+    return acc
+
 def norml2(vec):# input N by F
     F = vec.size(1)
     w = torch.sqrt((torch.t(vec.pow(2).sum(1).repeat(F,1))))
