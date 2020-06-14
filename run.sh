@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python main.py --Data CAR --model R18 --dim 64 --lr 3e-3 --method EPSHN --nsize 16 --ep 100
+CUDA_VISIBLE_DEVICES=0 python main.py --Data CAR --model R18 --dim 64 --lr 1e-2 --method EPSHN --nsize 16 --epochs 100

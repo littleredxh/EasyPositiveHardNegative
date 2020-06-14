@@ -16,15 +16,16 @@ parser.add_argument('--Data', type=str, help='dataset name: CUB, CAR, SOP or ICR
 parser.add_argument('--model', type=str, help='backbone model: R18 or R50')
 parser.add_argument('--dim', type=int, help='embedding dimension')
 parser.add_argument('--lr', type=float, help='initial learning rate')
-parser.add_argument('--method', type=str, help='order')
+parser.add_argument('--method', type=str, help='EPHN or EPSHN')
 parser.add_argument('--nsize', type=int, help='nsize')
 parser.add_argument('--epochs', type=int, help='epochs')
 args = parser.parse_args()
 
 
+###################################################  
 # data dict
 Data = args.Data
-dst = '_result/{}/{}_{}/G{}/'.format(args.method, args.Data, args.model, args.nsize)
+dst = '_result/{}/{}_{}/G{}_lr{}/'.format(args.method, args.Data, args.model, args.nsize, args.lr)
 data_dict = torch.load('/home/xuanhong/datasets/{}/data_dict_emb.pth'.format(Data))
 phase = ['tra','val']
 
@@ -45,6 +46,8 @@ print('batch size: {}'.format(batch_size))
 
 # loss setting
 criterion = EPHNLoss() 
+if args.method == 'EPSHN':
+    criterion.semi = True
 N_size = args.nsize
 print('number of images per class: {}'.format(N_size))
 
@@ -52,7 +55,6 @@ print('number of images per class: {}'.format(N_size))
 num_epochs = args.epochs
 test_freq = 5
 writer = SummaryWriter(dst)
-
 
 # model setting
 model = setModel(model_name, emb_dim).cuda()
@@ -64,8 +66,9 @@ if multi_gpu:
 # Optimizer and scheduler setting
 optimizer, scheduler = setOptimizer(model.parameters(), args.lr, [int(num_epochs*0.5), int(num_epochs*0.75)])
 
-        
-# training
+
+###################################################     
+# training model
 since = time.time() # recording time
 global_it = 0
 for epoch in range(num_epochs+1): 
@@ -84,13 +87,13 @@ for epoch in range(num_epochs+1):
             sampler = BalanceSampler_filled(dsets.intervals, GSize=N_size)
 
         # create dataloader
-        dataLoader = torch.utils.data.DataLoader(dsets, batch_size=batch_size, sampler=sampler, num_workers=32)
+        dataLoader = torch.utils.data.DataLoader(dsets, batch_size=batch_size, sampler=sampler, num_workers=num_workers)
         
         # Set model to training mode
         if multi_gpu:
             model.module.train()
         else:
-            model.eval()
+            model.train()
  
         # record loss
         L_data, N_data = 0.0, 0
@@ -122,8 +125,8 @@ for epoch in range(num_epochs+1):
         dsets_dict = {p: ImageReader(data_dict[p], eva_transform) for p in phase}
         acc = test(Data, dsets_dict, model, epoch, writer, multi_gpu=False)
         
-    
-    
+        
+###################################################  
 # save model
 torch.save(model.cpu().state_dict(), dst + 'model_state_dict.pth')
 time_elapsed = time.time() - since
