@@ -3,7 +3,7 @@ import numpy as np
 import random
 import torch
 
-class BalanceSampler(Sampler):
+class BalanceSampler_filled(Sampler):
     def __init__(self, intervals, GSize=2):
         
         class_len = len(intervals)
@@ -13,13 +13,11 @@ class BalanceSampler(Sampler):
         interval_list = [np.arange(b[0],b[1]) for b in intervals]
         len_max = max([b[1]-b[0] for b in intervals])
         
-        if len_max>1000:
-            len_max = 100
-        
         # exact division
         if len_max%GSize != 0:
             len_max = len_max+(GSize-len_max%GSize)
         
+        # filled images for each class
         for l in interval_list:
             if l.shape[0]<len_max:
                 l_ext = np.random.choice(l,len_max-l.shape[0])
@@ -35,7 +33,8 @@ class BalanceSampler(Sampler):
             
         random.shuffle(list_sp)
         self.idx = np.vstack(list_sp).reshape((GSize*class_len,-1)).T.reshape((1,-1)).flatten().tolist()
-
+        print('total images size in sampler: {}'.format(len(self.idx)))
+        
     def __iter__(self):
         return iter(self.idx)
     
@@ -43,7 +42,7 @@ class BalanceSampler(Sampler):
         return len(self.idx)
     
 
-class BalanceSampler2(Sampler):
+class BalanceSampler_sample(Sampler):
     def __init__(self, intervals, GSize=2):
         # generate interval list
         interval_list = []

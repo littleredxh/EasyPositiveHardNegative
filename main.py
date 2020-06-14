@@ -6,7 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 from _code.color_lib import RGBmean, RGBstdv
 from _code.Loss import EPHNLoss
 from _code.Model import setModel, setOptimizer
-from _code.Sampler import BalanceSampler, BalanceSampler2
+from _code.Sampler import BalanceSampler_sample, BalanceSampler_filled
 from _code.Reader import ImageReader
 from _code.Utils import tra_transforms, eva_transforms
 from _code.Evaluation import test
@@ -62,30 +62,26 @@ if multi_gpu:
     model = torch.nn.DataParallel(model, device_ids=[0,1,2,3], output_device=0)
 
 # Optimizer and scheduler setting
-optimizer, scheduler = setOptimizer(model.parameters(),args.lr,[int(num_epochs*0.5), int(num_epochs*0.75)])
+optimizer, scheduler = setOptimizer(model.parameters(), args.lr, [int(num_epochs*0.5), int(num_epochs*0.75)])
 
         
-# if Data in ['SOP','ICR']:
-#     batch_limit = 120
-# else:
-#     batch_limit = 30
-
-    
 # training
-# recording time
-since = time.time()
+since = time.time() # recording time
 global_it = 0
 for epoch in range(num_epochs+1): 
 
     print('Epoch {}/{} \n '.format(epoch, num_epochs) + '-' * 40)
 
-    # train
+    # train phase
     if epoch>0:  
         # create dset
         dsets = ImageReader(data_dict['tra'], tra_transform) 
 
         # create sampler
-        sampler = BalanceSampler(dsets.intervals, GSize=N_size)
+        if Data in ['SOP','ICR']:
+            sampler = BalanceSampler_sample(dsets.intervals, GSize=N_size)
+        else:
+            sampler = BalanceSampler_filled(dsets.intervals, GSize=N_size)
 
         # create dataloader
         dataLoader = torch.utils.data.DataLoader(dsets, batch_size=batch_size, sampler=sampler, num_workers=32)
@@ -94,7 +90,7 @@ for epoch in range(num_epochs+1):
         if multi_gpu:
             model.module.train()
         else:
-            model.train()
+            model.eval()
  
         # record loss
         L_data, N_data = 0.0, 0
@@ -120,7 +116,7 @@ for epoch in range(num_epochs+1):
         # adjust the learning rate
         scheduler.step()
     
-    # evaluation
+    # evaluation phase
     if epoch%test_freq==0:
         # evaluate train set
         dsets_dict = {p: ImageReader(data_dict[p], eva_transform) for p in phase}

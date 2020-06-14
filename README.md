@@ -1,8 +1,13 @@
 # Improved Embeddings with Easy Positive Triplet Mining
 
-This repository contains a PyTorch(1.1.0) implementation of Improved Embeddings with Easy Positive Triplet Mining(WACV2020)
+This repository contains a PyTorch(1.5.0) implementation of Improved Embeddings with Easy Positive Triplet Mining(WACV2020)
 
 Paper link: http://openaccess.thecvf.com/content_WACV_2020/papers/Xuan_Improved_Embeddings_with_Easy_Positive_Triplet_Mining_WACV_2020_paper.pdf
+
+Update History:
+June 10, 2020
+cleaned the code 
+replace the learner object with directly train codes
 
 Prepare the training data and testing data in python dictionary format. 
 
@@ -45,16 +50,17 @@ imgLab_gal:   Gallary image label, python list
 rank:         k of recall@k, python list
 ```
 
-The example of calling the function is shown in  ```Recall.ipynb```
-
 Please cite our paper, if you use these functions for recall calculation.
 
 ### Requirements
-Pytorch 1.0.0
+Pytorch 1.5.0
 
 Python 3.7
 
 ### Updates
+06/14/2020
+
+Reorganize the training code. 
 
 ### Citation
 ```
