@@ -9,7 +9,7 @@ from _code.Model import setModel, setOptimizer
 from _code.Sampler import BalanceSampler_sample, BalanceSampler_filled
 from _code.Reader import ImageReader
 from _code.Utils import tra_transforms, eva_transforms
-from _code.Evaluation import test
+from _code.Evaluation import test, test_hotel
 
 parser = argparse.ArgumentParser(description='running parameters')
 parser.add_argument('--Data', type=str, help='dataset name: CUB, CAR, SOP or ICR')
@@ -27,7 +27,7 @@ args = parser.parse_args()
 Data = args.Data
 dst = '_result/{}/{}_{}/G{}_lr{}/'.format(args.method, args.Data, args.model, args.nsize, args.lr)
 data_dict = torch.load('/home/xuanhong/datasets/{}/data_dict_emb.pth'.format(Data))
-phase = ['tra','val']
+phase = data_dict.keys()
 
 # dataset setting
 imgsize = 256
@@ -123,7 +123,10 @@ for epoch in range(num_epochs+1):
     if epoch%test_freq==0:
         # evaluate train set
         dsets_dict = {p: ImageReader(data_dict[p], eva_transform) for p in phase}
-        acc = test(Data, dsets_dict, model, epoch, writer, multi_gpu=False)
+        if Data=='HOTEL':
+            test_hotel(dst, epoch, dsets_dict, model, epoch, writer, multi_gpu=False)
+        else:
+            acc = test(Data, dsets_dict, model, epoch, writer, multi_gpu=False)
         
         
 ###################################################  
